@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 function isValidUrl(url) {
     const urlPattern = /^(https?:\/\/)?([a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}(\/.*)?$/;
@@ -12,8 +12,25 @@ function Settings({ goBack }) {
     const [isEditing, setIsEditing] = useState(false);
     const [editIndex, setEditIndex] = useState(null);
 
+    useEffect(() => {
+        window.chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+            if (message.type === "getData") {
+                const data = "This is the data from popup.js";
+
+                sendResponse({ data: data });
+            }
+
+            return true;
+        });
+    }, [])
+
     const saveUrls = newUrls => {
         localStorage.setItem('URLS', JSON.stringify(newUrls));
+        window.chrome.runtime.sendMessage({ type: 'UPDATE_URLS', urls: newUrls }, function(response) {
+            if (response.status === 'success') {
+                console.log('Redirect URL successfully updated in background script');
+            }
+        });
         setUrls(newUrls);
     }
 

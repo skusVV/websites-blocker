@@ -1,48 +1,85 @@
 import { useState, useEffect } from "react";
 
-const TEN_MINUTES = 600;
-const TWENTY_MINUTES = 1200;
+function formatTimeDifference(timestamp) {
+    const differenceInMs = Math.abs(Date.now() - timestamp);
+    const totalSeconds = Math.ceil(differenceInMs / 1000);
 
-function Timer({ goToSettings }) {
-    const [time, setTime] = useState(TEN_MINUTES); // default 5 minutes in seconds
-    const [customTime, setCustomTime] = useState('');
-    const [isRunning, setIsRunning] = useState(false);
-    const [intervalId, setIntervalId] = useState(null);
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+
+    const formattedHours = String(hours).padStart(2, '0');
+    const formattedMinutes = String(minutes).padStart(2, '0');
+    const formattedSeconds = String(seconds).padStart(2, '0');
+
+    return `${formattedHours}:${formattedMinutes}:${formattedSeconds}`;
+}
+
+function useLocalStorageState(initialValue, key ) {
+    const [state, setState] = useState(() => {
+        const storedValue = localStorage.getItem(key);
+        return storedValue !== null ? JSON.parse(storedValue) : initialValue;
+    });
 
     useEffect(() => {
-        if (isRunning && time > 0) {
-            const id = setInterval(() => {
-                setTime((prevTime) => prevTime - 1);
-            }, 1000);
-            setIntervalId(id);
-        } else if (time === 0 && intervalId) {
-            clearInterval(intervalId);
-            setIsRunning(false);
-        }
-        return () => clearInterval(intervalId);
-    }, [isRunning, time]);
+        localStorage.setItem(key, JSON.stringify(state));
+    }, [key, state]);
+
+    return [state, setState];
+}
+
+function Timer({ goToSettings }) {
+    const [time, setTime] = useLocalStorageState(null, 'time');
+    const [customTime, setCustomTime] = useLocalStorageState('20', 'customTime');
+    const [isRunning, setIsRunning] = useLocalStorageState(false, 'isRunning');
+    const [intervalId, setIntervalId] = useLocalStorageState(null, 'intervalId');
+    const [timer, setTimerValue] = useLocalStorageState(null, 'timer');
+
+    useEffect(() => {
+        const id = setInterval(() => {
+            if(!time) {
+                return;
+            }
+            if (isRunning && time > Date.now()) {
+                setTimerValue(Math.random())
+            } else if (time <= Date.now()) {
+                clearInterval(intervalId);
+                setIsRunning(false);
+                setTimerValue(null);
+            }
+        }, 1000);
+        setIntervalId(id);
+
+    }, [ isRunning, timer ]);
 
     const handleStart = () => {
+        // TODO notify background script about time and that it is running
+        const newTime = new Date().getTime() + customTime * 60 * 1000;
+        setTime(newTime);
         setIsRunning(true);
+
+        window.chrome.runtime.sendMessage({ type: 'UPDATE_DATA', data: { time: newTime, isRunning: true } }, function(response) {
+            if (response.status === 'success') {
+                console.log('Redirect URL successfully updated in background script');
+            }
+        });
     };
 
     const handleStop = () => {
-        setTime(TEN_MINUTES);
+        // TODO notify background script about STOP
         setIsRunning(false);
         clearInterval(intervalId);
-    };
+        setTimerValue(null);
 
-    const handleTimeChange = (newTime) => {
-        if (isRunning) {
-            return;
-        }
-        setTime(newTime);
-        setCustomTime('');
+        window.chrome.runtime.sendMessage({ type: 'UPDATE_DATA', data: { time: null, isRunning: false } }, function(response) {
+            if (response.status === 'success') {
+                console.log('Redirect URL successfully updated in background script');
+            }
+        });
     };
 
     const handleCustomTimeChange = (e) => {
         setCustomTime(e.target.value);
-        setTime(Number(e.target.value) * 60);
     };
 
     return (
@@ -50,23 +87,13 @@ function Timer({ goToSettings }) {
             <div className="bg-white p-6 rounded-lg shadow-md w-full max-w-sm">
                 <div className="mb-4 text-gray-700 text-sm font-semibold">Select Time</div>
                 <div className="flex justify-between mb-4">
-                    <button
-                        onClick={() => handleTimeChange(TEN_MINUTES)}
-                        className={`px-4 py-2 rounded-lg ${time === TEN_MINUTES ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-700'}`}>
-                        10 min
-                    </button>
-                    <button
-                        onClick={() => handleTimeChange(TWENTY_MINUTES)}
-                        className={`px-4 py-2 rounded-lg ${time === TWENTY_MINUTES ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-700'}`}>
-                        20 min
-                    </button>
                     <input
                         type="number"
                         disabled={isRunning}
                         placeholder="Custom (min)"
                         value={customTime}
                         onChange={handleCustomTimeChange}
-                        className="w-1/2 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
                 </div>
 
@@ -86,7 +113,9 @@ function Timer({ goToSettings }) {
                 </div>
 
                 <div className="mt-4 text-center text-lg font-semibold text-gray-700">
-                    {`${Math.floor(time / 60)}:${String(time % 60).padStart(2, '0')}`}
+                    {
+                        isRunning ? formatTimeDifference(time) : 'Are you ready?'
+                    }
                 </div>
             </div>
             <button
