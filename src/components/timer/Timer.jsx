@@ -15,7 +15,9 @@ function formatTimeDifference(timestamp) {
     return `${formattedHours}:${formattedMinutes}:${formattedSeconds}`;
 }
 
-function useLocalStorageState(initialValue, key ) {
+// Technically I would generate this key.
+// but for debugging point of view, it's better to pass it than have some random generated value
+function useLocalStorageState(initialValue, key) {
     const [state, setState] = useState(() => {
         const storedValue = localStorage.getItem(key);
         return storedValue !== null ? JSON.parse(storedValue) : initialValue;
@@ -53,10 +55,13 @@ function Timer({ goToSettings }) {
     }, [ isRunning, timer ]);
 
     const handleStart = () => {
-        // TODO notify background script about time and that it is running
         const newTime = new Date().getTime() + customTime * 60 * 1000;
         setTime(newTime);
         setIsRunning(true);
+
+        if(!window.chrome.runtime) {
+            return;
+        }
 
         window.chrome.runtime.sendMessage({ type: 'UPDATE_DATA', data: { time: newTime, isRunning: true } }, function(response) {
             if (response.status === 'success') {
@@ -66,10 +71,13 @@ function Timer({ goToSettings }) {
     };
 
     const handleStop = () => {
-        // TODO notify background script about STOP
         setIsRunning(false);
         clearInterval(intervalId);
         setTimerValue(null);
+
+        if(!window.chrome.runtime) {
+            return;
+        }
 
         window.chrome.runtime.sendMessage({ type: 'UPDATE_DATA', data: { time: null, isRunning: false } }, function(response) {
             if (response.status === 'success') {

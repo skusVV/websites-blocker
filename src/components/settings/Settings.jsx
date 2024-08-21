@@ -13,6 +13,10 @@ function Settings({ goBack }) {
     const [editIndex, setEditIndex] = useState(null);
 
     useEffect(() => {
+        if(!window.chrome.runtime) {
+            return;
+        }
+
         window.chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             if (message.type === "getData") {
                 const data = "This is the data from popup.js";
@@ -26,6 +30,9 @@ function Settings({ goBack }) {
 
     const saveUrls = newUrls => {
         localStorage.setItem('URLS', JSON.stringify(newUrls));
+        if(!window.chrome.runtime) {
+            return;
+        }
         window.chrome.runtime.sendMessage({ type: 'UPDATE_URLS', urls: newUrls }, function(response) {
             if (response.status === 'success') {
                 console.log('Redirect URL successfully updated in background script');
